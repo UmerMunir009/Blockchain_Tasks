@@ -1,0 +1,68 @@
+TASK_1
+
+To understand what is happening inside the UnifiedSwapper.sol contract, you can think of it as a universal adapter. It takes a simple request from you and translates it into the specific technical language that either Uniswap V2 or V3 understands.
+Here is a breakdown of the core mechanics:
+
+1. The "Hop" Strategy
+Since you only provide tokenIn and tokenOut, the contract needs a bridge to connect them if a direct pool doesn't exist.
+    The Path: The contract hardcodes a path through WETH (Wrapped Ether).
+    Logic: It performs two swaps in one transaction: tokenIn → WETH → tokenOut.
+    Liquidity: WETH is the most liquid token on Ethereum, so this "hop" ensures that almost any pair of tokens can be swapped.
+
+2. Handling the Two Versions
+Uniswap V2 and V3 are very different under the hood. The contract uses an if statement to decide which logic to execute:
+Uniswap V2 Logic (_swapV2)
+    Path Format: V2 uses a simple Address Array address[].
+    Execution: It calls swapExactTokensForTokens.
+    The Route: [tokenIn, WETH, tokenOut].
+
+Uniswap V3 Logic (_swapV3)
+    Path Format: V3 is more complex. It uses Packed Bytes (bytes).
+    Fee Tiers: Unlike V2 (which has a flat 0.3% fee), V3 pools have different fees (0.05%, 0.3%, 1%). The contract must pack the fee into the path.
+    The Route: abi.encodePacked(tokenIn, poolFee, WETH, poolFee, tokenOut).
+    Execution: It calls exactInput using a struct called ExactInputParams.
+
+3. The Money Flow (Safety First)
+To prevent your tokens from being stuck or stolen, the contract follows a strict workflow:
+    Pull: It uses transferFrom to pull the amountIn from your wallet into the contract.
+    Approve: It gives the specific Uniswap Router permission to spend those tokens.
+    Swap: It tells Uniswap to execute the trade and send the resulting tokens back to the contract.
+    Push: Finally, it sends the tokenOut from the contract back to your wallet.
+
+
+Feature,Uniswap V2,Uniswap V3
+Path Type,address[] (Array),bytes (Packed)
+Pricing,Constant Product (x⋅y=k),Concentrated Liquidity (Ticks)
+Fees,Fixed (0.3%),Variable (0.01% to 1%)
+Function,swapExactTokensForTokens,exactInput
+
+
+
+
+
+
+
+
+
+TESTING GIVES:::::::::
+Excellent! Your tests passed perfectly. This confirms that your UnifiedSwapper contract successfully:
+    Communicates with Uniswap V2 and V3 protocols.
+    Executes Multi-hop swaps (DAI → WETH → USDC).
+    Correctly pulls and pushes tokens between the user and the DEX.
+You even got a nice Gas Report showing that a V3 swap is slightly more expensive in gas (~251k) compared to V2 (~210k), which is expected due to V3's more complex logic.
+
+
+
+
+The reason they are different is that they refer to two completely different "universes" (blockchains).
+
+1. The Mainnet Universe (test.js)
+When you ran your tests, you used Mainnet Forking. You were essentially making a local copy of the real Ethereum network.
+    Address: 0xC02aaA... is the address of the real Wrapped Ether (WETH) on the Ethereum Mainnet.
+    Liquidity: This is where billions of dollars reside. Your test needed this address because the Uniswap pools you were "simulating" only exist in relation to this specific contract address on Mainnet.
+
+2. The Sepolia Universe (deploy.js)
+When you deploy, you are putting your contract on the Sepolia Testnet.
+    Address: 0x7b7999... is the address of WETH on the Sepolia network.
+    Purpose: Sepolia is a playground. The "ETH" there is fake, and the "WETH" is also a fake version designed for testing.
+    Compatibility: If you tried to use the Mainnet address (0xC02...) on Sepolia, your contract would crash because that address is empty on Sepolia. There is no code or money at that location in the Sepolia universe.
